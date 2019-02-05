@@ -1,0 +1,4 @@
+*.sw*
+config
+.DS_Store
+*.pyc
