@@ -50,7 +50,7 @@ class Ec2Test(unittest.TestCase):
         instances = self._instances()
         instance = Ec2(InstanceId=instances[0]['InstanceId'])
         self.assertEqual(instance._ec2_data, instances[0])
-        self.assertEqual(instance._id, instances[0]['InstanceId'])
+        self.assertEqual(instance.id(), instances[0]['InstanceId'])
 
     def test_load_instance_bad_id(self):
         """Instantiating an Ec2 object with a non-existant id should cause an 
@@ -71,7 +71,7 @@ class Ec2Test(unittest.TestCase):
 
         # new instance should have an id
         instance = Ec2.create_instance(images[0])
-        self.assertEqual(len(instance._id), self.INSTANCE_ID_LENGTH)
+        self.assertEqual(len(instance.id()), self.INSTANCE_ID_LENGTH)
 
         # there should only be one new instance
         self.assertEqual(len(self._instances()), self.INSTANCE_COUNT + 1)
@@ -103,3 +103,16 @@ class Ec2Test(unittest.TestCase):
         instance = Ec2(InstanceId=instance_id)
         with self.assertRaises(Ec2Exception):
             instance.terminate()
+
+    def test_state_returns_current_state(self):
+        instance_id = self._instances()[0]['InstanceId']
+        instance = Ec2(InstanceId=instance_id)
+
+        self.assertEqual(instance.state(), Ec2.STATE_RUNNING)
+
+        instance.terminate()
+        self.assertIn(instance.state(),
+            (Ec2.STATE_SHUTTING_DOWN, Ec2.STATE_TERMINATED)
+        )
+
+

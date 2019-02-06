@@ -12,6 +12,11 @@ class Ec2Exception(RollingDeployException):
 class Ec2(object):
     """A class representing an AWS ec2 instance."""
 
+    STATE_PENDING = 'pending'
+    STATE_RUNNING = 'running'
+    STATE_SHUTTING_DOWN = 'shutting-down'
+    STATE_TERMINATED = 'terminated'
+
     def __init__(self, InstanceId=None):
         self._client = self._get_client()
         self._load_instance(InstanceId)
@@ -19,12 +24,17 @@ class Ec2(object):
     def terminate(self):
         """Terminate this instance."""
         try:
-            response = self._client.terminate_instances(InstanceIds=(self._id,))
+            response = self._client.terminate_instances(InstanceIds=(self.id(),))
         except ClientError as e:
             raise Ec2Exception(
                 "Error attempting to terminate instance %s:\n %s" % \
-                (self._id, str(e),)
+                (self.id(), str(e),)
             )
+
+    def state(self):
+        self._load_instance(self.id())
+        return self._ec2_data['State']['Name']
+
 
     @staticmethod
     def _get_client():
@@ -38,11 +48,13 @@ class Ec2(object):
         try:
             response = self._client.describe_instances(InstanceIds=(instance_id,))
             self._ec2_data = response['Reservations'][0]['Instances'][0]
-            self._id = self._ec2_data['InstanceId']
         except (ClientError, IndexError) as e:
             raise Ec2Exception("Instance %s Not Found:\n %s" % \
                 (instance_id, str(e),)
                 )
+
+    def id(self):
+        return self._ec2_data['InstanceId']
 
     @staticmethod
     def ami_exists(image_id):
