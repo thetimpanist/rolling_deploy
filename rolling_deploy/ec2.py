@@ -4,10 +4,11 @@ from rolling_deploy.exception import (
     AwsConnectionException
 )
 from botocore.exceptions import ClientError
+from time import sleep
+import logging
 
 class Ec2Exception(RollingDeployException):
     """Ec2 Logic Exception."""
-
 
 class Ec2(object):
     """A class representing an AWS ec2 instance."""
@@ -16,6 +17,9 @@ class Ec2(object):
     STATE_RUNNING = 'running'
     STATE_SHUTTING_DOWN = 'shutting-down'
     STATE_TERMINATED = 'terminated'
+
+    WAIT_INTERVAL = 5
+    WAIT_LIMIT = 60
 
     def __init__(self, InstanceId=None):
         self._client = self._get_client()
@@ -32,14 +36,31 @@ class Ec2(object):
             )
 
     def state(self):
+        """The current state of this instance."""
         self._load_instance(self.id())
         return self._ec2_data['State']['Name']
 
+    def ami(self):
+        """The ami id of this instance."""
+        return self._ec2_data['ImageId']
 
-    @staticmethod
-    def _get_client():
-        """Helper method to get the boto3 ec2 client."""
-        return boto3.client('ec2')
+    def ready(self):
+        """This instance is running."""
+        return self.state() == self.STATE_RUNNING
+
+    def wait_ready(self):
+        """Poll instance until it's in ready state."""
+        poll = 0
+        while not self.ready() and poll < self.WAIT_LIMIT:
+            logging.info("Waiting for ec2 %i to become ready." % (self.id(),))
+            sleep(self.WAIT_INTERVAL)
+            poll += 1
+
+        if poll >= self.WAIT_LIMIT:
+            raise Ec2Exception("Instance %s took too long to become ready." % \
+                (self.id(),)
+            )
+        return True
 
     def _load_instance(self, instance_id):
         """Helper method to load the current data for the passed instance_id 
@@ -54,7 +75,13 @@ class Ec2(object):
                 )
 
     def id(self):
+        """Return the instance id."""
         return self._ec2_data['InstanceId']
+
+    @staticmethod
+    def _get_client():
+        """Helper method to get the boto3 ec2 client."""
+        return boto3.client('ec2')
 
     @staticmethod
     def ami_exists(image_id):

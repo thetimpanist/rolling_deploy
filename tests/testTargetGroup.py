@@ -3,55 +3,27 @@ import boto3
 from rolling_deploy.target_group import TargetGroup, ElbException
 from rolling_deploy.ec2 import Ec2
 from moto import mock_elbv2, mock_ec2
-from tests.testEc2 import Ec2Test
+from tests.ec2_mock import MockEc2Helper
+from tests.target_group_mock import MockTargetGroupHelper
 
 @mock_elbv2
 class TargetGroupTest(unittest.TestCase):
     """Target Group Object Tests."""
-
-    INSTANCE_COUNT = 3
 
     @classmethod
     @mock_elbv2
     def setUpClass(self):
         """Init class objects."""
         self._client = boto3.client('elbv2')
-        self._ec2_mock = Ec2Test()
+        self._target_group_mock = MockTargetGroupHelper()
+        self._ec2_mock = MockEc2Helper()
 
     def setUp(self):
         """Start test with default elb and single target group."""
-        self._ec2_mock.setUp()
-        subnet_response = self._ec2_mock._client.describe_subnets()
-        self._subnets = [subnet['SubnetId'] for subnet in 
-            subnet_response['Subnets'][:1]
-        ]
-        self._vpc = subnet_response['Subnets'][0]['VpcId']
-
-        # self._elb = self._client.create_load_balancer(
-        #     Name='TestLb', Subnets=self._subnets
-        # )['LoadBalancers'][0]
-
-        self._target_group = self._client.create_target_group(
-            Name='MyTG', Port=80
-        )['TargetGroups'][0]
-
-        self._client.register_targets(
-            TargetGroupArn=self._target_group['TargetGroupArn'],
-            Targets=[{"Id": instance['InstanceId']} for instance in
-                self._ec2_mock._instances()
-            ]
-        )
-
+        self._target_group = self._target_group_mock.setUp()
 
     def tearDown(self):
-        self._ec2_mock.tearDown()
-        self._client.delete_target_group(
-            TargetGroupArn=self._target_group['TargetGroupArn']
-        )
-        # self._client.delete_load_balancer(
-        #     LoadBalancerArn=self._elb['LoadBalancerArn']
-        # )
-
+        self._target_group_mock.tearDown()
 
     def test_load_target_group(self):
         """Target Group should load with api pulled data."""
@@ -80,7 +52,7 @@ class TargetGroupTest(unittest.TestCase):
         """Target group should return the instances currently registered."""
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
         mock_instances = [instance['InstanceId'] for instance in \
-            self._ec2_mock._instances()]
+            self._ec2_mock.instances()]
 
         tg_instances = [instance.id() for instance in target_group.instances()]
 
@@ -88,7 +60,7 @@ class TargetGroupTest(unittest.TestCase):
 
     def test_add_instance(self):
         """Registering an instance should add it to the target group."""
-        ami_id = self._ec2_mock._images()[0]
+        ami_id = self._ec2_mock.images()[0]
         instance = Ec2.create_instance(ami_id)
 
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
@@ -101,7 +73,7 @@ class TargetGroupTest(unittest.TestCase):
 
     def test_add_terminated_instance_failure(self):
         """Adding a non-ready instance should fail."""
-        ami_id = self._ec2_mock._images()[0]
+        ami_id = self._ec2_mock.default_image()
         instance = Ec2.create_instance(ami_id)
         instance.terminate()
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
@@ -125,7 +97,7 @@ class TargetGroupTest(unittest.TestCase):
 
     def test_remove_non_grouped_instance_should_fail(self):
         """Removing an instance not in the target group should fail."""
-        ami_id = self._ec2_mock._images()[0]
+        ami_id = self._ec2_mock.default_image()
         instance = Ec2.create_instance(ami_id)
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
 
@@ -142,17 +114,27 @@ class TargetGroupTest(unittest.TestCase):
         self.assertEqual(set(instance_ids), set(healthy_ids))
     # TODO test unhealthy instances? how with mock?
 
-    def test_is_healthY(self):
+    def test_is_healthy(self):
         """Test that an instance that should be healthy reports as healthy."""
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
         self.assertTrue(target_group.is_healthy(target_group.instances()[0]))
 
-    def test_is_unhealthY(self):
+    def test_is_unhealthy(self):
         """Test that an instance that is not in the group doesn't report as
         healthy.
         """
         target_group = TargetGroup(self._target_group['TargetGroupArn'])
-        ami_id = self._ec2_mock._images()[0]
+        ami_id = self._ec2_mock.default_image()
         instance = Ec2.create_instance(ami_id)
 
         self.assertFalse(target_group.is_healthy(instance))
+
+    def test_wait_healthy(self):
+        """Health check should return true when target registers as healthy."""
+        target_group = TargetGroup(self._target_group['TargetGroupArn'])
+        ami_id = self._ec2_mock.default_image()
+        instance = Ec2.create_instance(ami_id)
+        target_group.add_instance(instance)
+
+        self.assertTrue(target_group.wait_healthy(instance))
+

@@ -5,6 +5,8 @@ from rolling_deploy.exception import (
 )
 from rolling_deploy.ec2 import Ec2
 from botocore.exceptions import ClientError
+from time import sleep
+import logging
 
 class ElbException(RollingDeployException):
     """Load Balancer Logic Exception."""
@@ -15,7 +17,10 @@ class TargetGroup(object):
     HEALTH_HEALTHY = 'healthy'
     HEALTH_UNHEALTHY = 'unhealthy'
     HEALTH_INITIAL = 'initial'
-    HEALH_DRAINING = 'draining'
+    HEALTH_DRAINING = 'draining'
+
+    WAIT_INTERVAL = 5
+    WAIT_LIMIT = 60
 
     def __init__(self, TargetGroupArn=None):
         self._client = self._get_client()
@@ -69,6 +74,22 @@ class TargetGroup(object):
     def is_healthy(self, instance):
         """Is the instance reporting healthy in this target group?"""
         return instance.id() in [ec2.id() for ec2 in self.healthy_instances()]
+
+    def wait_healthy(self, instance):
+        """Poll instance until it's passes target group health checks."""
+        poll = 0
+        while not self.is_healthy(instance) and poll < self.WAIT_LIMIT:
+            logging.info("Waiting for ec2 %i to report healthy." % \
+                (instance.id(),)
+            )
+            sleep(self.WAIT_INTERVAL)
+            poll += 1
+
+        if poll >= self.WAIT_LIMIT:
+            raise Ec2Exception("Instance %s took too long to pass health checks." \
+                % (instance.id(),)
+            )
+        return True
 
     def add_instance(self, instance):
         """Add an instance to the target group."""

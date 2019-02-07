@@ -1,8 +1,8 @@
 import unittest
 import boto3
 from rolling_deploy.ec2 import Ec2, Ec2Exception
+from tests.ec2_mock import MockEc2Helper
 from moto import mock_ec2
-
 
 @mock_ec2
 class Ec2Test(unittest.TestCase):
@@ -16,38 +16,22 @@ class Ec2Test(unittest.TestCase):
     def setUpClass(self):
         """Init class objects."""
         self._client = boto3.client('ec2')
+        self._ec2_mock = MockEc2Helper()
 
     def setUp(self):
         """Start test with default 3 instances created."""
         self.tearDown()
-        self._client.run_instances(ImageId=self._images()[2],
-            MinCount=self.INSTANCE_COUNT, MaxCount=self.INSTANCE_COUNT
-            )
+        self._ec2_mock.setUp()
 
     def tearDown(self):
         """Clean all instances from mock after testing."""
-        ids = [instance['InstanceId'] for instance in self._instances()]
-        if ids:
-            self._client.terminate_instances(InstanceIds=ids)
-
-    def _images(self):
-        """Get a list of ami images in the mock."""
-        response = self._client.describe_images()
-        return [image['ImageId'] for image in response['Images']]
-
-    def _instances(self):
-        """Get a list of currently live instances."""
-        response = self._client.describe_instances()
-        return [instance for reservation in response['Reservations'] \
-            for instance in reservation['Instances'] \
-            if instance['State']['Name'] in ('pending', 'running')
-            ]
+        self._ec2_mock.tearDown()
 
     def test_load_instance(self):
         """Instantiating an Ec2 object with an instance id should return an
         object containing that instance's data.
         """
-        instances = self._instances()
+        instances = self._ec2_mock.instances()
         instance = Ec2(InstanceId=instances[0]['InstanceId'])
         self.assertEqual(instance._ec2_data, instances[0])
         self.assertEqual(instance.id(), instances[0]['InstanceId'])
@@ -61,20 +45,20 @@ class Ec2Test(unittest.TestCase):
 
     def test_ami_exists(self):
         """AMI existance tests should return correct boolean values."""
-        images = self._images()
+        images = self._ec2_mock.images()
         self.assertTrue(Ec2.ami_exists(images[0]))
         self.assertFalse(Ec2.ami_exists('ami-phonyid'))
 
     def test_create_instance(self):
         """Creating an instance should work."""
-        images = self._images()
+        images = self._ec2_mock.images()
 
         # new instance should have an id
         instance = Ec2.create_instance(images[0])
         self.assertEqual(len(instance.id()), self.INSTANCE_ID_LENGTH)
 
         # there should only be one new instance
-        self.assertEqual(len(self._instances()), self.INSTANCE_COUNT + 1)
+        self.assertEqual(len(self._ec2_mock.instances()), self.INSTANCE_COUNT + 1)
 
     def test_create_instance_bad_ami(self):
         """Creating an instance with an improper ami id should fail."""
@@ -85,16 +69,16 @@ class Ec2Test(unittest.TestCase):
         """Terminating an instance should work remove it from the live 
         instances.
         """
-        instances = self._instances()
+        instances = self._ec2_mock.instances()
         instance = Ec2(InstanceId=instances[0]['InstanceId'])
         instance.terminate()
-        self.assertEqual(len(self._instances()), self.INSTANCE_COUNT - 1)
+        self.assertEqual(len(self._ec2_mock.instances()), self.INSTANCE_COUNT - 1)
 
     def test_double_termination_failure(self):
         """Attempting to terminate the same instance instance twice should 
         fail.
         """
-        instance_id = self._instances()[0]['InstanceId']
+        instance_id = self._ec2_mock.instances()[0]['InstanceId']
         instance = Ec2(InstanceId=instance_id)
         instance.terminate()
         with self.assertRaises(Ec2Exception):
@@ -105,7 +89,8 @@ class Ec2Test(unittest.TestCase):
             instance.terminate()
 
     def test_state_returns_current_state(self):
-        instance_id = self._instances()[0]['InstanceId']
+        """Getting the state of an instance should return it's state."""
+        instance_id = self._ec2_mock.instances()[0]['InstanceId']
         instance = Ec2(InstanceId=instance_id)
 
         self.assertEqual(instance.state(), Ec2.STATE_RUNNING)
@@ -115,4 +100,17 @@ class Ec2Test(unittest.TestCase):
             (Ec2.STATE_SHUTTING_DOWN, Ec2.STATE_TERMINATED)
         )
 
+    def test_ami_returns_ami_id(self):
+        """Getting the ami of an instance should return it's ami id."""
+        instance_id = self._ec2_mock.instances()[0]['InstanceId']
+        instance = Ec2(InstanceId=instance_id)
+
+        self.assertEqual(instance.ami(), self._ec2_mock.default_image())
+
+
+    def test_wait_ready(self):
+        """Class should poll instance until it times out or becomes ready."""
+        ec2 = Ec2.create_instance(self._ec2_mock.default_image())
+        self.assertTrue(ec2.wait_ready())
+        # TODO test wait timeout????
 
