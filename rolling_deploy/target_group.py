@@ -79,7 +79,7 @@ class TargetGroup(object):
         """Poll instance until it's passes target group health checks."""
         poll = 0
         while not self.is_healthy(instance) and poll < self.WAIT_LIMIT:
-            logging.info("Waiting for ec2 %i to report healthy." % \
+            logging.info("Waiting for ec2 %s to report healthy." % \
                 (instance.id(),)
             )
             sleep(self.WAIT_INTERVAL)

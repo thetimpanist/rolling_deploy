@@ -52,7 +52,7 @@ class Ec2(object):
         """Poll instance until it's in ready state."""
         poll = 0
         while not self.ready() and poll < self.WAIT_LIMIT:
-            logging.info("Waiting for ec2 %i to become ready." % (self.id(),))
+            logging.info("Waiting for ec2 %s to become ready." % (self.id(),))
             sleep(self.WAIT_INTERVAL)
             poll += 1
 
