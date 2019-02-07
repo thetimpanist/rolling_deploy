@@ -19,8 +19,8 @@ class TargetGroup(object):
     HEALTH_INITIAL = 'initial'
     HEALTH_DRAINING = 'draining'
 
-    WAIT_INTERVAL = 5
-    WAIT_LIMIT = 60
+    WAIT_INTERVAL = 10 
+    WAIT_LIMIT = 30
 
     def __init__(self, TargetGroupArn=None):
         self._client = self._get_client()
@@ -126,3 +126,16 @@ class TargetGroup(object):
     def _get_client():
         """Helper method to get the boto3 elbv2 client."""
         return boto3.client('elbv2')
+
+    @classmethod
+    def from_load_balancer(cls, lb_arn):
+        """Get the first target group attached to a load balancer."""
+        client = boto3.client('elbv2')
+        try:
+            response = client.describe_target_groups(LoadBalancerArn=lb_arn)
+            return cls(TargetGroupArn=
+                response['TargetGroups'][0]['TargetGroupArn']
+            )
+        except (ClientError, IndexError) as e:
+            raise TargetGroupError("Unable to find target groups attached to %s"\
+                % (lb_arn,))

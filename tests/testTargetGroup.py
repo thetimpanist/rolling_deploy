@@ -112,7 +112,6 @@ class TargetGroupTest(unittest.TestCase):
         healthy_ids = [ec2.id() for ec2 in target_group.healthy_instances()]
 
         self.assertEqual(set(instance_ids), set(healthy_ids))
-    # TODO test unhealthy instances? how with mock?
 
     def test_is_healthy(self):
         """Test that an instance that should be healthy reports as healthy."""
@@ -138,3 +137,25 @@ class TargetGroupTest(unittest.TestCase):
 
         self.assertTrue(target_group.wait_healthy(instance))
 
+    def test_from_load_balancer(self):
+        """We should retrieve a TargetGroup object when passing it's parent
+        load balancer.
+        """
+        subnets = self._ec2_mock._client.describe_subnets()['Subnets'][:1]
+        elb = self._client.create_load_balancer(Name="TestLb",
+            Subnets=[subnet['SubnetId'] for subnet in subnets]
+        )['LoadBalancers'][0]
+        self._client.create_listener(LoadBalancerArn=elb['LoadBalancerArn'],
+            Protocol='HTTP', Port=80, DefaultActions=({
+                "Type": 'forward', 
+                "TargetGroupArn": self._target_group['TargetGroupArn']
+            },))
+
+        target_group = TargetGroup.from_load_balancer(elb['LoadBalancerArn'])
+
+        self.assertIsInstance(target_group, TargetGroup)
+        self.assertEqual(target_group.arn(), \
+            self._target_group['TargetGroupArn']
+        )
+
+        self._client.delete_load_balancer(LoadBalancerArn=elb['LoadBalancerArn'])
