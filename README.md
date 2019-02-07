@@ -15,5 +15,4 @@ A sample script to perform rolling deployments on aws.
 
 ### RUNNING TESTS ###
 * docker-compose up &
-* docker-compose exec app python -m unittest tests
-
+* docker-compose exec app python -m unittest discover tests
