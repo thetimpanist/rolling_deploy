@@ -11,8 +11,10 @@ A sample script to perform rolling deployments on aws.
 ### EXECUTING ###
 * docker-compose up &
 * docker-compose exec app ./deploy old_ami_id new_ami_id
+* docker-compose down
 
 
 ### RUNNING TESTS ###
 * docker-compose up &
 * docker-compose exec app python -m unittest discover tests
+* docker-compose down
