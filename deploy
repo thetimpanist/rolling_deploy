@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+import os
+import sys
+from rolling_deploy.deployer import Deployer
+from rolling_deploy.target_group import TargetGroup
+import logging
+
+if __name__ == '__main__':
+    logging.getLogger().setLevel(logging.INFO)
+
+    target_group = os.environ['TARGET_GROUP']
+    old_ami = sys.argv[1]
+    new_ami = sys.argv[2]
+    deployer = Deployer(TargetGroup(target_group))
+
+    deployer.deploy(old_ami, new_ami)

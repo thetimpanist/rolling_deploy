@@ -6,3 +6,5 @@ services:
             - .:/usr/src/app
             - ~/.aws:/root/.aws
         tty: true
+        env_file:
+          - .env
