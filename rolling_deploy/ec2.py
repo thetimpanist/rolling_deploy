@@ -18,8 +18,8 @@ class Ec2(object):
     STATE_SHUTTING_DOWN = 'shutting-down'
     STATE_TERMINATED = 'terminated'
 
-    WAIT_INTERVAL = 5
-    WAIT_LIMIT = 60
+    WAIT_INTERVAL = 10
+    WAIT_LIMIT = 30
 
     def __init__(self, InstanceId=None):
         self._client = self._get_client()
