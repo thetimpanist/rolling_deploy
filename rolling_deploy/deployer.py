@@ -6,6 +6,7 @@ from rolling_deploy.exception import (
 from rolling_deploy.ec2 import Ec2
 from botocore.exceptions import ClientError
 from time import sleep
+import logging
 
 class DeployerException(RollingDeployException):
     """Deployment Logic Exception."""
@@ -13,8 +14,7 @@ class DeployerException(RollingDeployException):
 class Deployer(object):
     """Class to manage rolling deployments of ec2 instances to a target group."""
 
-    WAIT_INTERVAL = 5
-    WAIT_TIMEOUT = 20
+    WAIT_TIMEOUT = 30
 
     def __init__(self, target_group):
         self._target_group = target_group
@@ -25,6 +25,9 @@ class Deployer(object):
         running the new ami.
         """
         old_instances = self._get_ami_instances(old_ami)
+        logging.info("Replacing %d instances running ami %s with ami %s" %
+            (len(old_instances), old_ami, new_ami)
+        )
         for instance in old_instances:
             self._roll_in(new_ami)
             self._roll_out(instance)
@@ -50,18 +53,24 @@ class Deployer(object):
 
     def _roll_out(self, instance):
         """Remove an instance from the target group."""
+        logging.info("Removing instance %s from target group." % \
+            (instance.id(),)
+        )
         self._target_group.remove_instance(instance)
 
-    def wait_drained(self, instance, wait_interval=5):
+    def wait_drained(self, instance, wait_interval=10):
         """Wait for instance to be drained from the target_group."""
         poll = 0
         targets = [ec2.id() for ec2 in self._target_group.instances()]
         while instance.id() in targets and poll < self.WAIT_TIMEOUT:
+            logging.info("Waiting for instance %s to drain from target group." %
+                (instance.id(),)
+            )
             targets = [ec2.id() for ec2 in self._target_group.instances()]
             sleep(wait_interval)
             poll += 1
 
-        if poll >= self.WAIT_INTERVAL:
+        if poll >= self.WAIT_TIMEOUT:
             raise DeployerException(
                 "Instance %s is not draining from the target group." %
                 (instance.id(),)
@@ -72,4 +81,5 @@ class Deployer(object):
         """Terminate any old instances."""
         for instance in instances:
             self.wait_drained(instance, wait_interval)
+            logging.info("Terminating instance %s" % (instance.id(),))
             instance.terminate()
